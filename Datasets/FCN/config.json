@@ -1,0 +1,8 @@
+{
+    "sequence_length": 30,
+    "activity_threshold": 30,
+    "sequence_length_wide": 60,
+    "activity_threshold_wide": 60,
+    "start_week": "02.07.2017",
+    "dataset_filename": "daod_mc16_13TeV_sequences.csv"
+}
