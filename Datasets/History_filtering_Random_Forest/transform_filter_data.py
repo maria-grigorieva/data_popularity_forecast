@@ -12,20 +12,40 @@ def transform_filter_data(
     horizon_date = pd.Timestamp('2023-01-07'),
     span_threshold = pd.Timedelta('90 days'),
     history_len = pd.Timedelta('365 days'),
-    accesses_threshold = 30
+    accesses_threshold = 30,
+    merge_tids = False
 ):
 
     df = pd.read_csv(source_csv)
     
     df['datetime'] = pd.to_datetime(df['datetime'])
+
+    if merge_tids:
+        print('merging datasets with different tids')
+        bar1 = tqdm(total=len(df))
+
+        def base_datasetname(ds_name):
+            idx = ds_name.rfind('_tid')
+            bar1.update()
+            if idx == -1:
+                return ds_name
+            return ds_name[:idx]
+        
+        df['base_datasetname'] = df['datasetname'].apply(base_datasetname)
+        bar1.close()
+
+        n_sub_datasets = df.groupby(
+            ['base_datasetname'])['datasetname'].nunique()
     
     history = df[df['datetime'] <= finish_date]
     
     target_period = df[(df['datetime'] > finish_date) &
                        (df['datetime'] <= horizon_date)]
+
+    groupby_field = 'base_datasetname' if merge_tids else 'datasetname'
     
-    history_gb = history.groupby(['datasetname'])
-    target_period_gb = target_period.groupby(['datasetname'])
+    history_gb = history.groupby([groupby_field])
+    target_period_gb = target_period.groupby([groupby_field])
     
     n_accesses = history_gb['datetime'].count()
     access_dates = history_gb['datetime'].apply(lambda x : x.to_numpy())
@@ -47,10 +67,17 @@ def transform_filter_data(
     
     objs_df['y'] = 0
 
-    print('filling \'y\' column')    
+    if merge_tids:
+        print('filling \'y\' and \'n_sub_datasets\' columns')
+        objs_df['n_sub_datasets'] = 0
+    else:
+        print('filling \'y\' column')
+
     for ds_name, ds_features in tqdm(objs_df.iterrows(), total=len(objs_df)):
         if ds_name in future_popularity:
             objs_df.loc[ds_name, 'y'] = future_popularity[ds_name]
+        if merge_tids:
+            objs_df.loc[ds_name, 'n_sub_datasets'] = n_sub_datasets[ds_name]
     
     objs_df = objs_df[objs_df['n_accesses'] > accesses_threshold]
 
@@ -107,10 +134,10 @@ def transform_filter_data(
     
         bar.update()
         return res.to_numpy()
-    
-    sequences = objs_df['history'].apply(dates_array_to_timeseries)
-    
-    objs_df['history_ts'] = sequences
+
+
+    objs_df['history_ts'] = objs_df['history'].apply(dates_array_to_timeseries)
+    bar.close()
 
     objs_df.drop('access_dates', axis='columns', inplace=True)
     objs_df.drop('has_history', axis='columns', inplace=True)
